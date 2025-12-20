@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { books } from "@/app/lib/books";
 
 type Props = {
@@ -9,21 +9,35 @@ type Props = {
 
 export default function BookPage({ params }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const [bookId, setBookId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // unwrap params (Next.js 16)
-  const [bookId, setBookId] = useState<string | null>(null);
-
-  if (!bookId) {
+  // 1️⃣ Unwrap params (ALWAYS runs)
+  useEffect(() => {
     params.then((p) => setBookId(p.id));
-    return null;
-  }
+  }, [params]);
 
   const book = books.find((b) => b.id === bookId);
-  if (!book) return <div>Book not found</div>;
+  const storageKey = book ? `book-progress-${book.id}` : null;
 
-  const scrollToPage = (page: number) => {
-    if (!containerRef.current) return;
+  // 2️⃣ Restore last page (ALWAYS declared, guarded inside)
+  useEffect(() => {
+    if (!storageKey || !book) return;
+
+    const savedPage = localStorage.getItem(storageKey);
+    if (savedPage) {
+      const page = Number(savedPage);
+      setCurrentPage(page);
+
+      requestAnimationFrame(() => {
+        scrollToPage(page, false);
+      });
+    }
+  }, [storageKey, book]);
+
+  const scrollToPage = (page: number, save = true) => {
+    if (!containerRef.current || !storageKey) return;
 
     const container = containerRef.current;
     const pageWidth = container.clientWidth;
@@ -34,7 +48,16 @@ export default function BookPage({ params }: Props) {
     });
 
     setCurrentPage(page);
+
+    if (save) {
+      localStorage.setItem(storageKey, String(page));
+    }
   };
+
+  // 🟡 Safe render guards (JSX only)
+  if (!book) {
+    return <div>Loading book…</div>;
+  }
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
@@ -43,12 +66,12 @@ export default function BookPage({ params }: Props) {
         Page {currentPage} / {book.totalPages}
       </div>
 
-      {/* Book pages */}
+      {/* Pages */}
       <div
         ref={containerRef}
         style={{
           flex: 1,
-          overflowX: "hidden",
+          overflow: "hidden",
           display: "flex",
         }}
       >
